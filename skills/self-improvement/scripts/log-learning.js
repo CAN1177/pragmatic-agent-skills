@@ -91,13 +91,7 @@ function pickLogFile(learningsDir, signalType) {
   return path.join(learningsDir, "LEARNINGS.md");
 }
 
-function main() {
-  const args = parseArgs(process.argv);
-  if (args.help) {
-    printHelp();
-    return;
-  }
-
+function validateArgs(args) {
   const required = [
     "skill",
     "type",
@@ -118,12 +112,16 @@ function main() {
   if (!VALID_TYPES.has(args.type)) {
     throw new Error(`Invalid --type value: ${args.type}`);
   }
+}
 
-  const skillDir = path.resolve(__dirname, "..");
+function run(args, options = {}) {
+  validateArgs(args);
+
+  const skillDir = options.skillDir || path.resolve(__dirname, "..");
   const learningsDir = path.join(skillDir, ".learnings");
   ensureDir(learningsDir);
 
-  const timestamp = nowIso();
+  const timestamp = options.nowIso ? options.nowIso() : nowIso();
   const event = {
     id: `evt-${compactDateStamp(timestamp)}`,
     timestamp,
@@ -146,11 +144,38 @@ function main() {
   appendMarkdown(logFile, event);
 
   console.log(`Recorded learning event ${event.id}`);
+  return event;
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
+function main() {
+  const args = parseArgs(process.argv);
+  if (args.help) {
+    printHelp();
+    return;
+  }
+
+  run(args);
 }
+
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+
+module.exports = {
+  VALID_TYPES,
+  appendMarkdown,
+  compactDateStamp,
+  ensureDir,
+  main,
+  nowIso,
+  parseArgs,
+  pickLogFile,
+  printHelp,
+  run,
+  validateArgs,
+};

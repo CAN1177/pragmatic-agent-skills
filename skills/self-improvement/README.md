@@ -41,6 +41,96 @@ Do not use it for:
 - one-off tasks with no reuse value
 - immediate manual edits where evidence collection is unnecessary
 
+## Agent Triggers
+
+This skill is a good fit when a user says things like:
+
+- "Remember this lesson for next time."
+- "This skill keeps making the same mistake."
+- "Turn these repeated corrections into an improvement proposal."
+- "Track what worked here so the skill can improve over time."
+
+Typical internal triggers:
+
+- the user corrects the same class of output more than once
+- the agent repeats a cleanup step across different tasks
+- a workaround succeeds repeatedly and looks reusable
+- the user asks for long-term improvement instead of a one-off fix
+
+## Usage
+
+Run these commands from the `self-improvement/` directory.
+
+### 1. Record one learning event
+
+```bash
+node scripts/log-learning.js \
+  --skill frontend-api-integration \
+  --type user_correction \
+  --task "User asked for an API integration plan" \
+  --happened "First draft focused on process and missed the field mapping table" \
+  --feedback "The priority is field mapping, not general process" \
+  --lesson "For API integration tasks, prioritize field mapping and fallback handling" \
+  --scope skill \
+  --target frontend-api-integration \
+  --task-id api-001 \
+  --source session-2026-06-30-001
+```
+
+This appends:
+
+- `.learnings/events.jsonl`
+- one Markdown log file under `.learnings/`
+
+### 2. Record more events for the same lesson
+
+Do not promote a rule from one example. Record repeated corrections, failures, or success patterns across different tasks.
+
+Typical `--type` values:
+
+- `success_pattern`
+- `user_correction`
+- `error_pattern`
+- `feature_request`
+
+### 3. Distill repeated events into candidates
+
+```bash
+node scripts/distill-patterns.js
+```
+
+Or use custom thresholds:
+
+```bash
+node scripts/distill-patterns.js --min-evidence 3 --min-distinct-tasks 2
+```
+
+This generates:
+
+- `.learnings/patterns.json`
+- `.learnings/promotion_candidates.md`
+
+### 4. Inspect the output
+
+Check `promotion_candidates.md` to see which lessons are strong enough to propose for wider promotion.
+
+Typical next actions:
+
+- keep it as local evidence only
+- promote it into shared guidance
+- turn it into a patch proposal for another skill
+- split it out into a new skill if the pattern is broad enough
+
+## Quick Start
+
+Minimal local workflow:
+
+1. run `node scripts/log-learning.js ...` after a correction, failure, or repeatable success
+2. record more events when the same lesson appears across different tasks
+3. run `node scripts/distill-patterns.js`
+4. inspect `.learnings/promotion_candidates.md`
+5. decide whether the candidate stays local or should be promoted further
+
 ## Workflow
 
 ### 1. Record Events
@@ -173,6 +263,31 @@ Minimum expectation:
 - `scripts/` and `.learnings/` stay colocated with the skill
 
 For local use, run the helper scripts from the skill directory or reference them with an absolute path.
+
+## Testing
+
+This skill can be tested with Node's built-in test runner. No extra dependencies are required.
+
+Run from the skill directory:
+
+```bash
+npm test
+```
+
+Current unit tests cover:
+
+- CLI argument parsing
+- log file routing
+- pattern key normalization and grouping
+- promotion threshold filtering
+- candidate Markdown rendering
+
+Integration coverage also verifies the end-to-end local workflow:
+
+- append learning events into `.learnings/events.jsonl`
+- write mirrored Markdown logs
+- distill repeated events into `patterns.json`
+- promote only eligible recent candidates into `promotion_candidates.md`
 
 ## Files
 

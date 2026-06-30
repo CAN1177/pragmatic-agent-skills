@@ -166,13 +166,7 @@ function renderCandidates(candidates) {
   return `${lines.join("\n")}\n`;
 }
 
-function main() {
-  const args = parseArgs(process.argv);
-  if (args.help) {
-    printHelp();
-    return;
-  }
-
+function validateThresholds(args) {
   const minEvidence = Number(args["min-evidence"] || 3);
   const minDistinctTasks = Number(args["min-distinct-tasks"] || 2);
 
@@ -183,7 +177,13 @@ function main() {
     throw new Error("Invalid --min-distinct-tasks value");
   }
 
-  const skillDir = path.resolve(__dirname, "..");
+  return { minEvidence, minDistinctTasks };
+}
+
+function run(args = {}, options = {}) {
+  const { minEvidence, minDistinctTasks } = validateThresholds(args);
+
+  const skillDir = options.skillDir || path.resolve(__dirname, "..");
   const learningsDir = path.join(skillDir, ".learnings");
   const eventsFile = path.join(learningsDir, "events.jsonl");
   const patternsFile = path.join(learningsDir, "patterns.json");
@@ -208,11 +208,42 @@ function main() {
   console.log(
     `Distilled ${patterns.length} pattern(s), promoted ${candidates.length} candidate(s)`
   );
+  return { patterns, candidates, patternsFile, candidatesFile };
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
+function main() {
+  const args = parseArgs(process.argv);
+  if (args.help) {
+    printHelp();
+    return;
+  }
+
+  run(args);
 }
+
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+
+module.exports = {
+  THIRTY_DAYS_MS,
+  buildCandidates,
+  buildPatternKey,
+  createPattern,
+  groupEvents,
+  isRecent,
+  main,
+  normalizeKeyPart,
+  parseArgs,
+  printHelp,
+  readJsonLines,
+  renderCandidates,
+  run,
+  validateThresholds,
+  writePatterns,
+};

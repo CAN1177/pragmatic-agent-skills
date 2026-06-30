@@ -1,0 +1,7 @@
+{
+  "name": "self-improvement-skill",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}
