@@ -1,43 +1,106 @@
-# AI Toolkit
+# Pragmatic Agent Skills
 
-一个专注于 AI 工程化实践的资源仓库，汇集日常开发中沉淀的prompts、skills与 MCP 工具等。
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Skills](https://img.shields.io/badge/skills-3-black.svg)](skills/README.md)
+[![Status](https://img.shields.io/badge/status-active-blue.svg)](docs/roadmap.md)
+[![Docs](https://img.shields.io/badge/docs-available-lightgrey.svg)](docs/getting-started.md)
 
-## 目录结构
+An open collection of production-minded agent skills.
 
+[中文说明](README.zh.md)
+
+This repository focuses on one thing: reusable skills that solve real tasks with explicit rules, fallbacks, and operational boundaries. It is not a prompt dump, and it is not a generic AI toolbox.
+
+## Why This Repo Exists
+
+Most public AI repos have one of two problems:
+
+- they are broad but shallow
+- they look useful, but do not carry enough execution detail to be reused safely
+
+`Pragmatic Agent Skills` is opinionated in the opposite direction:
+
+- each skill is narrow and concrete
+- each skill defines trigger conditions and non-goals
+- important fallback behavior is written down
+- scripts and templates are included when the skill needs them
+
+If you build with Cursor, Claude Code, Codex, Windsurf, or similar agent systems, the goal is simple: install a skill and get repeatable behavior instead of rewriting the same working pattern every week.
+
+## What Is In Here
+
+Current skills:
+
+| Skill | What it does | Why it is interesting |
+| --- | --- | --- |
+| [JobJD-Greeting-Generator](skills/JobJD-Greeting-Generator/README.md) | Turns a JD and candidate facts into one copy-ready recruiting message | Strong fallback design around `jd_url` extraction instead of giving up early |
+| [leetcode-coach](skills/leetcode-coach/README.md) | Keeps public coaching logic separate from private LeetCode records | Clean split between shared skill logic and user-owned data |
+| [self-improvement](skills/self-improvement/README.md) | Captures usage learnings and distills improvement candidates for skills | Turns repeated agent corrections into a traceable improvement loop |
+
+Browse the full index in [skills/README.md](skills/README.md).
+
+## Design Principles
+
+Every skill in this repo should follow the same bar:
+
+1. Solve one concrete problem.
+2. State when the skill should and should not trigger.
+3. Prefer deterministic workflow over vague guidance.
+4. Preserve user-owned data boundaries.
+5. Fail explicitly when confidence is low.
+6. Stay useful as a public artifact, not just a personal note.
+
+More detail: [docs/design-principles.md](docs/design-principles.md)
+
+## Quick Start
+
+1. Pick a skill from [skills/README.md](skills/README.md)
+2. Read its `README.md` for the public contract
+3. Read its `SKILL.md` for agent-facing rules
+4. Reuse the included scripts/templates if the skill provides them
+
+Setup notes: [docs/getting-started.md](docs/getting-started.md)
+
+## Generic Prompts vs Pragmatic Skills
+
+| Generic prompts | Pragmatic skills |
+| --- | --- |
+| broad instructions | narrow task scope |
+| weak trigger boundaries | explicit trigger and non-goal definitions |
+| one-shot output bias | repeatable workflow bias |
+| hidden fallback behavior | documented fallback path |
+| hard to reuse consistently | easier to install and reuse across agent runtimes |
+
+## Repository Layout
+
+```text
+.
+├── skills/   # public, reusable agent skills
+├── docs/     # repo-level principles and onboarding docs
+└── tests/    # focused validation for selected skills
 ```
-ai-toolkit/
-├── docs/     # 文档与设计说明
-├── prompts/  # 提示词工程
-├── skills/   # Agent Skills 技能模块
-└── mcp/      # MCP 工具与服务
-```
 
-## 模块说明
+## Why People Might Star This
 
-### 📝 prompts — 提示词工程
+- the skills are usable, not aspirational
+- the repository shows how to package agent behavior cleanly
+- the examples are grounded in real workflows
+- the implementation style is narrow enough to copy
 
-经过调优的 Prompt 模板集合，涵盖代码生成、文本处理、推理增强等场景。
+If this repo becomes valuable, it will be because each skill is a small, opinionated piece of working infrastructure.
 
-### 🛠️ skills — Agent Skills
+## Contributing
 
-兼容 [Agent Skills](https://agentskills.io) 开放标准的可复用技能模块，支持 Cursor、Claude Code、Windsurf 等 AI 编码助手。
+Issues and PRs are welcome, especially when they improve one of these:
 
-详细说明见 [skills/README.md](skills/README.md)。
+- skill clarity
+- fallback behavior
+- examples
+- validation
+- installation ergonomics
 
-### 📚 docs — 文档与流程说明
+Contribution notes: [CONTRIBUTING.md](CONTRIBUTING.md)
 
-补充设计说明、执行流程和落地约定。
+## Changelog
 
-其中 leetcode 做题记录远程同步流程见 [docs/leetcode-record-sync.md](docs/leetcode-record-sync.md)。
-
-### 🔌 mcp — MCP 工具
-
-基于 [Model Context Protocol](https://modelcontextprotocol.io) 的工具集，提供自定义 Server 实现与客户端集成示例。
-
-## 使用方式
-
-浏览对应目录，每个子目录下均有独立的说明文档，按需取用。
-
-## 贡献
-
-欢迎提交 PR 或 Issue。
+Recent repository history: [CHANGELOG.md](CHANGELOG.md)

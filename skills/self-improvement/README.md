@@ -1,21 +1,93 @@
 # self-improvement
 
-Minimal engineering implementation for skill evolution through repeated use.
+Capture agent usage learnings, distill repeated patterns, and turn them into evidence-backed improvement candidates.
 
-The goal is not "immediately rewrite a skill". The goal is to first build:
+## What This Skill Does
 
-1. event capture
-2. pattern distillation
-3. promotion candidates
+This skill creates a low-risk improvement loop for other skills.
 
-Only after later validation should a candidate rule be written back into a target `SKILL.md`.
+It does not directly rewrite a target `SKILL.md`. Instead, it separates improvement into stages:
 
-## Design Principles
+1. record events
+2. distill repeated patterns
+3. propose promotion candidates
 
-- Low risk: record first, do not directly rewrite skill files
-- Traceable: every candidate rule maps back to raw events
-- Layered promotion: events become patterns, then candidate rules
-- Extensible: validation, scoring, and patch generation can be added later
+That design keeps skill evolution traceable and avoids overreacting to one noisy correction.
+
+## Why This Skill Is Worth Keeping
+
+Many agent systems say they "learn", but the actual loop is vague.
+
+This skill makes the loop concrete:
+
+- raw events are preserved
+- repeated lessons are aggregated
+- promotion requires evidence
+- write-back can stay separate from observation
+
+That makes it useful both as a workflow and as a design pattern for agent improvement.
+
+## Best Fit
+
+Use this skill when:
+
+- users repeatedly correct similar output
+- a workflow keeps failing in the same way
+- a repeatable success pattern is emerging
+- you want a skill to improve over time without unsafe direct rewrites
+
+Do not use it for:
+
+- one-off tasks with no reuse value
+- immediate manual edits where evidence collection is unnecessary
+
+## Workflow
+
+### 1. Record Events
+
+Use the logger to capture one event at a time:
+
+```bash
+node scripts/log-learning.js --help
+```
+
+Typical event types:
+
+- user correction
+- task failure
+- successful repeatable method
+- missing capability request
+
+### 2. Distill Patterns
+
+Aggregate events into reusable candidate patterns:
+
+```bash
+node scripts/distill-patterns.js --help
+```
+
+This updates:
+
+- `.learnings/patterns.json`
+- `.learnings/promotion_candidates.md`
+
+### 3. Decide Promotion
+
+After enough evidence exists, a candidate can remain:
+
+- as a local learning
+- as shared project guidance
+- as a patch proposal for a target skill
+- as the seed of a new skill
+
+## Default Promotion Threshold
+
+A candidate should usually satisfy all of these:
+
+1. `evidence_count >= 3`
+2. `distinct_tasks >= 2`
+3. seen within the last 30 days
+4. expressible as a reusable rule
 
 ## Directory Layout
 
@@ -37,11 +109,9 @@ self-improvement/
     `-- promotion_candidates.md
 ```
 
-## Current Implementation
+## Example
 
-### 1. Record Events
-
-Command:
+Record a correction:
 
 ```bash
 node scripts/log-learning.js \
@@ -56,60 +126,57 @@ node scripts/log-learning.js \
   --task-id api-001
 ```
 
-Effect:
-
-- append one line to `.learnings/events.jsonl`
-- append a readable entry to the matching markdown log
-
-### 2. Distill Patterns
-
-Command:
+Then distill:
 
 ```bash
 node scripts/distill-patterns.js
 ```
 
-Effect:
+Example distilled candidate:
 
-- aggregate `.learnings/events.jsonl`
-- write `.learnings/patterns.json`
-- generate `.learnings/promotion_candidates.md` using thresholds
+```text
+Target: frontend-api-integration
+Evidence count: 3
+Distinct tasks: 2
+Candidate lesson:
+For API integration tasks, prioritize field mapping and fallback handling before general process explanation.
+```
 
-## Current Aggregation Logic
+What this shows:
 
-Patterns are grouped by:
+- a repeated correction becomes a reusable proposal
+- promotion is evidence-backed instead of anecdotal
+- the workflow stays inspectable after the fact
 
-- `target_scope`
-- `target_name`
-- `proposed_lesson`
+## Boundaries
 
-In practice, multiple events are treated as the same candidate pattern when they point to the same target and propose the same lesson.
+- do not promote one correction into a durable rule
+- do not silently override existing skill rules
+- do not skip evidence and jump straight to rewrite
+- keep proposals traceable to raw events
 
-## Default Promotion Threshold
+## Installation / Runtime Use
 
-- `evidence_count >= 3`
-- `distinct_tasks >= 2`
-- seen within the last 30 days
+Place this skill in a runtime-visible skill directory, for example:
 
-## Next Steps
+```text
+~/.agents/skills/self-improvement
+~/.claude/skills/self-improvement
+~/.cursor/skills/self-improvement
+<repo>/skills/self-improvement
+```
 
-Possible additions:
+Minimum expectation:
 
-1. conflict detection
-2. patch proposal generation
-3. skill-specific eval comparison
-4. validated write-back flow
+- `README.md` explains the public contract
+- `SKILL.md` defines agent-facing execution rules
+- `scripts/` and `.learnings/` stay colocated with the skill
 
-## Current Todo
+For local use, run the helper scripts from the skill directory or reference them with an absolute path.
 
-1. Implement `generate-skill-patch.js`
-Purpose: convert rules in `promotion_candidates.md` into patch proposals for a target skill instead of directly editing the target `SKILL.md`.
+## Files
 
-2. Implement `review-and-promote.js`
-Purpose: add explicit state transitions such as `candidate -> approved -> promoted` so promotion becomes auditable.
-
-3. Add conflict detection
-Purpose: flag semantic conflicts between candidate rules and existing rules before promotion.
-
-4. Add a validation loop
-Purpose: compare old/new skill outputs before a rule is written back to the skill body.
+- [SKILL.md](SKILL.md): agent-facing rules
+- [references/event-schema.md](references/event-schema.md): event fields
+- [scripts/log-learning.js](scripts/log-learning.js): event logger
+- [scripts/distill-patterns.js](scripts/distill-patterns.js): pattern distillation
