@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-06-30T06:10:03.480Z",
+  "patterns": [
+    {
+      "pattern_key": "skill::frontend-api-integration::接口联调任务优先输出字段映射与兜底策略",
+      "summary": "接口联调任务优先输出字段映射与兜底策略",
+      "evidence_count": 3,
+      "distinct_tasks": 3,
+      "last_seen": "2026-06-30T06:08:49.207Z",
+      "recent": true,
+      "signal_types": [
+        "user_correction",
+        "success_pattern"
+      ],
+      "target_scope": "skill",
+      "target_name": "frontend-api-integration",
+      "candidate_rule": "接口联调任务优先输出字段映射与兜底策略",
+      "evidence_refs": [
+        "evt-20260630060846",
+        "evt-20260630060848",
+        "evt-20260630060849"
+      ],
+      "status": "candidate"
+    }
+  ]
+}
