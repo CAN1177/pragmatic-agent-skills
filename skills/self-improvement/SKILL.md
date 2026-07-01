@@ -1,11 +1,11 @@
 ---
 name: self-improvement
-description: Use this skill to capture usage learnings, distill repeated patterns, and generate improvement candidates for skills without directly rewriting the target SKILL.md. Trigger when users correct output, repeated failures appear, stable success patterns emerge, capability gaps are found, or the goal is to make a skill improve through ongoing use.
+description: MUST USE as a meta-skill when any other skill usage produces a user correction, repeated failure, stable success pattern, workaround, capability gap, or explicit "remember this" feedback. Capture usage learnings, distill repeated patterns, and generate evidence-backed improvement candidates without directly rewriting the target SKILL.md.
 ---
 
 # Self Improvement
 
-This skill does not directly rewrite other `SKILL.md` files. Its job is to build a low-risk, traceable learning loop for skill evolution.
+This skill is a meta-skill for improving other skills from real usage. It does not directly rewrite other `SKILL.md` files. Its job is to build a low-risk, traceable learning loop for skill evolution.
 
 ## When To Use
 
@@ -14,6 +14,7 @@ This skill does not directly rewrite other `SKILL.md` files. Its job is to build
 - The user corrects output and wants similar cases handled better later.
 - A task pattern keeps failing or needs repeated manual cleanup.
 - The user wants long-term improvement rules distilled from real usage.
+- Another skill just finished and produced a reusable correction, failure, workaround, success pattern, or capability gap.
 
 Do not use this skill when:
 
@@ -26,6 +27,18 @@ Do not use this skill when:
 2. Do not promote a single feedback event into a long-term rule.
 3. Every candidate rule must point back to concrete evidence.
 4. Default to proposals, not direct skill rewrites.
+
+## Active Recording Protocol
+
+This skill cannot passively listen to all skill calls unless the host runtime provides hooks. Active recording therefore happens through the main agent or a host hook.
+
+After using another skill, perform a lightweight learning checkpoint:
+
+1. If no reusable learning signal appeared, do nothing.
+2. If a reusable signal appeared, record one event without asking the user.
+3. If promoting a candidate would modify another skill, ask for confirmation first.
+
+Use `scripts/record-from-context.js` when the agent or a runtime hook has a structured summary of the just-completed skill usage. Use `scripts/log-learning.js` when the event fields are already known.
 
 ## Workflow
 
@@ -42,6 +55,12 @@ Use:
 
 ```bash
 node <SKILL_DIR>/scripts/log-learning.js --help
+```
+
+For automatic or hook-driven recording from a skill-use summary, use:
+
+```bash
+node <SKILL_DIR>/scripts/record-from-context.js --help
 ```
 
 ### 2. Distill Patterns
@@ -83,6 +102,7 @@ self-improvement/
 |-- README.md
 |-- scripts/
 |   |-- log-learning.js
+|   |-- record-from-context.js
 |   `-- distill-patterns.js
 |-- references/
 |   `-- event-schema.md

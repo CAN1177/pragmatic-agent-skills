@@ -14,6 +14,22 @@ It does not directly rewrite a target `SKILL.md`. Instead, it separates improvem
 
 That design keeps skill evolution traceable and avoids overreacting to one noisy correction.
 
+## Active Trigger Model
+
+`self-improvement` is intended to be used as a meta-skill while other skills are running.
+
+It is not a passive background listener by itself. A skill can only be recorded actively through one of these paths:
+
+- the main agent performs a learning checkpoint after using another skill
+- a host runtime hook calls the recorder after a skill invocation
+- the user explicitly asks to remember or improve a repeated behavior
+
+The practical MVP is the first path. After any other skill finishes, the agent checks whether the run produced a reusable learning signal:
+
+- no reusable signal: do nothing
+- user correction, repeated failure, stable workaround, success pattern, or capability gap: record one event
+- candidate promotion or target skill rewrite: ask for confirmation first
+
 ## Why This Skill Is Worth Keeping
 
 Many agent systems say they "learn", but the actual loop is vague.
@@ -56,6 +72,7 @@ Typical internal triggers:
 - the agent repeats a cleanup step across different tasks
 - a workaround succeeds repeatedly and looks reusable
 - the user asks for long-term improvement instead of a one-off fix
+- another skill just produced a reusable correction, failure, workaround, success pattern, or capability gap
 
 ## Usage
 
@@ -81,6 +98,24 @@ This appends:
 
 - `.learnings/events.jsonl`
 - one Markdown log file under `.learnings/`
+
+For agent-driven or hook-driven recording, pass a structured skill-use summary to `record-from-context.js`:
+
+```bash
+node scripts/record-from-context.js \
+  --used-skill frontend-api-integration \
+  --signal correction \
+  --task "User asked for an API integration plan" \
+  --observed "First draft focused on process and missed the field mapping table" \
+  --feedback "The priority is field mapping, not general process" \
+  --lesson "For API integration tasks, prioritize field mapping and fallback handling" \
+  --target-scope skill \
+  --target-name frontend-api-integration \
+  --task-id api-001 \
+  --source session-2026-06-30-001
+```
+
+This script maps runtime-friendly signals like `correction`, `failure`, `workaround`, and `capability_gap` into the event schema used by `log-learning.js`.
 
 ### 2. Record more events for the same lesson
 
@@ -124,6 +159,32 @@ Typical next actions:
 ## Quick Start
 
 Minimal local workflow:
+
+1. after using any other skill, run a learning checkpoint
+2. run `node scripts/record-from-context.js ...` or `node scripts/log-learning.js ...` when a reusable signal appears
+3. record more events when the same lesson appears across different tasks
+4. run `node scripts/distill-patterns.js`
+5. inspect `.learnings/promotion_candidates.md`
+6. decide whether the candidate stays local or should be promoted further
+
+The checkpoint is intentionally lightweight. It should not interrupt normal task completion when no durable learning signal exists.
+
+## Runtime Integration Contract
+
+If the host runtime supports hooks, call `record-from-context.js` after skill usage with this minimum context:
+
+- `used_skill`: skill that produced the experience
+- `signal`: `correction`, `failure`, `success`, `workaround`, or `capability_gap`
+- `task`: short task summary
+- `what_happened` or `observed`: concrete behavior
+- `user_feedback` or `feedback`: raw correction or acceptance signal
+- `proposed_lesson` or `lesson`: reusable lesson
+- `target_scope`: usually `skill`
+- `target_name`: usually the used skill name
+
+Do not record every skill call. Record only when the event contains a plausible reusable lesson.
+
+Manual fallback workflow:
 
 1. run `node scripts/log-learning.js ...` after a correction, failure, or repeatable success
 2. record more events when the same lesson appears across different tasks
@@ -187,6 +248,7 @@ self-improvement/
 |-- README.md
 |-- scripts/
 |   |-- log-learning.js
+|   |-- record-from-context.js
 |   `-- distill-patterns.js
 |-- references/
 |   `-- event-schema.md
@@ -294,4 +356,5 @@ Integration coverage also verifies the end-to-end local workflow:
 - [SKILL.md](SKILL.md): agent-facing rules
 - [references/event-schema.md](references/event-schema.md): event fields
 - [scripts/log-learning.js](scripts/log-learning.js): event logger
+- [scripts/record-from-context.js](scripts/record-from-context.js): active recording entrypoint for agents or runtime hooks
 - [scripts/distill-patterns.js](scripts/distill-patterns.js): pattern distillation

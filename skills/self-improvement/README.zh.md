@@ -10,6 +10,22 @@
 
 这样做的目的，是避免因为一次偶发反馈就把噪声写成长期规则。
 
+## 主动触发模型
+
+`self-improvement` 的最终定位是“元 skill”：它在其它 skill 被使用时，记录可复用的经验信号。
+
+它本身不是后台监听器。除非宿主运行时提供 hook，否则 skill 不能被动监听所有 skill 调用。主动记录只能来自三条路径：
+
+- 主 agent 在使用其它 skill 后执行一次 learning checkpoint
+- 宿主运行时在 skill 调用后通过 hook 调用记录脚本
+- 用户明确要求“记住这次”“下次别这样”“改进这个 skill”
+
+最现实的 MVP 是第一条：其它 skill 完成后，agent 做一次轻量判断：
+
+- 没有可复用信号：不记录
+- 出现用户纠正、重复失败、稳定 workaround、成功模式、能力缺口：记录一条事件
+- 要晋升候选或改写目标 skill：先征求确认
+
 ## 这个 Skill 是做什么的
 
 很多 agent 系统会说“可以学习”，但真正的学习闭环往往不清晰。
@@ -52,6 +68,7 @@
 - agent 在不同任务里重复做同一类人工补救
 - 某个 workaround 连续成功，已经像稳定方法
 - 用户要的是长期改进，而不是当前这一次的修复
+- 其它 skill 刚刚产生了可复用的纠正、失败、workaround、成功模式或能力缺口
 
 ## 使用方式
 
@@ -77,6 +94,24 @@ node scripts/log-learning.js \
 
 - `.learnings/events.jsonl`
 - `.learnings/` 下对应的 Markdown 日志文件
+
+如果是主 agent 或运行时 hook 从“其它 skill 的使用上下文”主动记录，优先使用：
+
+```bash
+node scripts/record-from-context.js \
+  --used-skill frontend-api-integration \
+  --signal correction \
+  --task "用户要求生成接口联调方案" \
+  --observed "首版输出偏流程说明，缺少字段映射表" \
+  --feedback "重点不是流程，而是字段如何对齐" \
+  --lesson "接口联调任务优先输出字段映射与兜底策略" \
+  --target-scope skill \
+  --target-name frontend-api-integration \
+  --task-id api-001 \
+  --source session-2026-06-30-001
+```
+
+这个入口会把 `correction`、`failure`、`workaround`、`capability_gap` 这类运行时信号映射为标准 event schema。
 
 ### 2. 同一个 lesson 继续累计更多事件
 
@@ -121,11 +156,29 @@ node scripts/distill-patterns.js --min-evidence 3 --min-distinct-tasks 2
 
 最小闭环就是这 5 步：
 
-1. 在一次 correction、failure 或 repeatable success 后执行 `node scripts/log-learning.js ...`
-2. 当相同 lesson 在不同任务里再次出现时继续记录
-3. 执行 `node scripts/distill-patterns.js`
-4. 查看 `.learnings/promotion_candidates.md`
-5. 决定这个候选只保留为证据，还是继续晋升
+1. 每次使用其它 skill 后执行一次 learning checkpoint
+2. 如果出现可复用信号，执行 `node scripts/record-from-context.js ...` 或 `node scripts/log-learning.js ...`
+3. 当相同 lesson 在不同任务里再次出现时继续记录
+4. 执行 `node scripts/distill-patterns.js`
+5. 查看 `.learnings/promotion_candidates.md`
+6. 决定这个候选只保留为证据，还是继续晋升
+
+这个 checkpoint 应该很轻，不应该在没有长期价值时打断正常任务。
+
+## 运行时集成协议
+
+如果宿主支持 hook，可以在其它 skill 调用后把下面这些上下文传给 `record-from-context.js`：
+
+- `used_skill`：产生经验的 skill
+- `signal`：`correction`、`failure`、`success`、`workaround` 或 `capability_gap`
+- `task`：任务摘要
+- `what_happened` 或 `observed`：实际发生了什么
+- `user_feedback` 或 `feedback`：用户原始反馈或接受信号
+- `proposed_lesson` 或 `lesson`：可复用 lesson
+- `target_scope`：通常是 `skill`
+- `target_name`：通常是被使用的 skill 名称
+
+不要记录每一次 skill 调用。只有事件包含可复用 lesson 时才记录。
 
 ## 工作流
 
@@ -195,6 +248,7 @@ self-improvement/
 |-- package.json
 |-- scripts/
 |   |-- log-learning.js
+|   |-- record-from-context.js
 |   `-- distill-patterns.js
 |-- tests/
 |   |-- log-learning.test.js
@@ -315,4 +369,5 @@ npm test
 - [SKILL.md](SKILL.md)：agent 侧执行规则
 - [references/event-schema.md](references/event-schema.md)：事件字段定义
 - [scripts/log-learning.js](scripts/log-learning.js)：事件记录脚本
+- [scripts/record-from-context.js](scripts/record-from-context.js)：供 agent 或运行时 hook 使用的主动记录入口
 - [scripts/distill-patterns.js](scripts/distill-patterns.js)：模式归纳脚本

@@ -24,6 +24,17 @@ Each learning event is stored as one JSON line in `.learnings/events.jsonl`.
 - `error_pattern`
 - `feature_request`
 
+## Runtime Signal Mapping
+
+`scripts/record-from-context.js` accepts runtime-friendly signal names and maps them to `signal_type`:
+
+- `correction` or `user_correction` -> `user_correction`
+- `failure`, `error`, or `error_pattern` -> `error_pattern`
+- `success`, `success_pattern`, or `workaround` -> `success_pattern`
+- `capability_gap`, `feature`, or `feature_request` -> `feature_request`
+
+Use runtime signals for agent or hook integration. Use `signal_type` directly when calling `scripts/log-learning.js`.
+
 ## Example
 
 ```json
