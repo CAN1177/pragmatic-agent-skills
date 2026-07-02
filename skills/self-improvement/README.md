@@ -1,260 +1,84 @@
 # self-improvement
 
-Capture agent usage learnings, distill repeated patterns, and turn them into evidence-backed improvement candidates.
-
-## What This Skill Does
-
-This skill creates a low-risk improvement loop for other skills.
-
-It does not directly rewrite a target `SKILL.md`. Instead, it separates improvement into stages:
-
-1. record events
-2. distill repeated patterns
-3. propose promotion candidates
-
-That design keeps skill evolution traceable and avoids overreacting to one noisy correction.
-
-## Active Trigger Model
-
-`self-improvement` is intended to be used as a meta-skill while other skills are running.
-
-It is not a passive background listener by itself. A skill can only be recorded actively through one of these paths:
-
-- the main agent performs a learning checkpoint after using another skill
-- a host runtime hook calls the recorder after a skill invocation
-- the user explicitly asks to remember or improve a repeated behavior
-
-The practical MVP is the first path. After any other skill finishes, the agent checks whether the run produced a reusable learning signal:
-
-- no reusable signal: do nothing
-- user correction, repeated failure, stable workaround, success pattern, or capability gap: record one event
-- candidate promotion or target skill rewrite: ask for confirmation first
-
-For a centralized automatic checkpoint, use `scripts/auto-record-learning.js` as a post-skill hook. It is safe to call after every skill invocation and will skip runs that do not contain a reusable learning signal.
-
-## Why This Skill Is Worth Keeping
-
-Many agent systems say they "learn", but the actual loop is vague.
-
-This skill makes the loop concrete:
-
-- raw events are preserved
-- repeated lessons are aggregated
-- promotion requires evidence
-- write-back can stay separate from observation
-
-That makes it useful both as a workflow and as a design pattern for agent improvement.
-
-## Best Fit
-
-Use this skill when:
-
-- users repeatedly correct similar output
-- a workflow keeps failing in the same way
-- a repeatable success pattern is emerging
-- you want a skill to improve over time without unsafe direct rewrites
-
-Do not use it for:
-
-- one-off tasks with no reuse value
-- immediate manual edits where evidence collection is unnecessary
-
-## Agent Triggers
-
-This skill is a good fit when a user says things like:
-
-- "Remember this lesson for next time."
-- "This skill keeps making the same mistake."
-- "Turn these repeated corrections into an improvement proposal."
-- "Track what worked here so the skill can improve over time."
-
-Typical internal triggers:
-
-- the user corrects the same class of output more than once
-- the agent repeats a cleanup step across different tasks
-- a workaround succeeds repeatedly and looks reusable
-- the user asks for long-term improvement instead of a one-off fix
-- another skill just produced a reusable correction, failure, workaround, success pattern, or capability gap
-
-## Usage
-
-Run these commands from the `self-improvement/` directory.
-
-### 1. Record one learning event
-
-```bash
-node scripts/log-learning.js \
-  --skill frontend-api-integration \
-  --type user_correction \
-  --task "User asked for an API integration plan" \
-  --happened "First draft focused on process and missed the field mapping table" \
-  --feedback "The priority is field mapping, not general process" \
-  --lesson "For API integration tasks, prioritize field mapping and fallback handling" \
-  --scope skill \
-  --target frontend-api-integration \
-  --task-id api-001 \
-  --source session-2026-06-30-001
-```
-
-This appends:
-
-- `.learnings/events.jsonl`
-- one Markdown log file under `.learnings/`
-
-For agent-driven or hook-driven recording, pass a structured skill-use summary to `record-from-context.js`:
-
-```bash
-node scripts/record-from-context.js \
-  --used-skill frontend-api-integration \
-  --signal correction \
-  --task "User asked for an API integration plan" \
-  --observed "First draft focused on process and missed the field mapping table" \
-  --feedback "The priority is field mapping, not general process" \
-  --lesson "For API integration tasks, prioritize field mapping and fallback handling" \
-  --target-scope skill \
-  --target-name frontend-api-integration \
-  --task-id api-001 \
-  --source session-2026-06-30-001
-```
-
-This script maps runtime-friendly signals like `correction`, `failure`, `workaround`, and `capability_gap` into the event schema used by `log-learning.js`.
-
-If you want one entry point that can be called after every skill invocation without pre-filtering, use:
-
-```bash
-node scripts/auto-record-learning.js --context-json /tmp/skill-context.json
-```
-
-This hook behaves as follows:
-
-- `should_record=false`: skip
-- no `signal`: skip
-- valid reusable signal: record through `record-from-context.js`
-
-### 2. Record more events for the same lesson
-
-Do not promote a rule from one example. Record repeated corrections, failures, or success patterns across different tasks.
-
-Typical `--type` values:
-
-- `success_pattern`
-- `user_correction`
-- `error_pattern`
-- `feature_request`
-
-### 3. Distill repeated events into candidates
-
-```bash
-node scripts/distill-patterns.js
-```
-
-Or use custom thresholds:
-
-```bash
-node scripts/distill-patterns.js --min-evidence 3 --min-distinct-tasks 2
-```
-
-This generates:
-
-- `.learnings/patterns.json`
-- `.learnings/promotion_candidates.md`
-
-### 4. Inspect the output
-
-Check `promotion_candidates.md` to see which lessons are strong enough to propose for wider promotion.
-
-Typical next actions:
-
-- keep it as local evidence only
-- promote it into shared guidance
-- turn it into a patch proposal for another skill
-- split it out into a new skill if the pattern is broad enough
+Evidence-backed self-improvement for agent skills. The package installs a `self-improvement` skill and wires Claude Code / Codex hooks so user corrections after slash-skill usage are recorded automatically.
 
 ## Quick Start
 
-Minimal local workflow:
-
-1. after using any other skill, run a learning checkpoint
-2. run `node scripts/record-from-context.js ...` or `node scripts/log-learning.js ...` when a reusable signal appears
-3. record more events when the same lesson appears across different tasks
-4. run `node scripts/distill-patterns.js`
-5. inspect `.learnings/promotion_candidates.md`
-6. decide whether the candidate stays local or should be promoted further
-
-The checkpoint is intentionally lightweight. It should not interrupt normal task completion when no durable learning signal exists.
-
-## Runtime Integration Contract
-
-If the host runtime supports hooks, call `record-from-context.js` after skill usage with this minimum context:
-
-- `used_skill`: skill that produced the experience
-- `signal`: `correction`, `failure`, `success`, `workaround`, or `capability_gap`
-- `task`: short task summary
-- `what_happened` or `observed`: concrete behavior
-- `user_feedback` or `feedback`: raw correction or acceptance signal
-- `proposed_lesson` or `lesson`: reusable lesson
-- `target_scope`: usually `skill`
-- `target_name`: usually the used skill name
-
-Do not record every skill call. Record only when the event contains a plausible reusable lesson.
-
-If your host prefers a single unconditional post-skill hook, call `auto-record-learning.js` instead and let it decide whether to skip or record.
-
-Manual fallback workflow:
-
-1. run `node scripts/log-learning.js ...` after a correction, failure, or repeatable success
-2. record more events when the same lesson appears across different tasks
-3. run `node scripts/distill-patterns.js`
-4. inspect `.learnings/promotion_candidates.md`
-5. decide whether the candidate stays local or should be promoted further
-
-## Workflow
-
-### 1. Record Events
-
-Use the logger to capture one event at a time:
-
 ```bash
-node scripts/log-learning.js --help
+npx self-improvement-skill install
+npx self-improvement-skill doctor
 ```
 
-Typical event types:
+After installation, use Claude Code or Codex normally. When a slash skill such as `/super-get-wiki` is followed by a correction like "不对..." or "应该先...", the hook records a learning event under the installed skill's `.learnings/` directory.
 
-- user correction
-- task failure
-- successful repeatable method
-- missing capability request
-
-### 2. Distill Patterns
-
-Aggregate events into reusable candidate patterns:
+## CLI
 
 ```bash
-node scripts/distill-patterns.js --help
+npx self-improvement-skill install [--target both|claude|codex]
+npx self-improvement-skill doctor [--json]
+npx self-improvement-skill uninstall [--target both|claude|codex] [--remove-files]
+npx self-improvement-skill distill [--min-evidence 3] [--min-distinct-tasks 2]
 ```
 
-This updates:
+See [CLI.md](CLI.md) for details.
 
-- `.learnings/patterns.json`
-- `.learnings/promotion_candidates.md`
+## What Gets Installed
 
-### 3. Decide Promotion
+The CLI installs the skill into:
 
-After enough evidence exists, a candidate can remain:
+- `~/.claude/skills/self-improvement`
+- `~/.codex/skills/self-improvement`
 
-- as a local learning
-- as shared project guidance
-- as a patch proposal for a target skill
-- as the seed of a new skill
+It also writes managed hook entries into:
 
-## Default Promotion Threshold
+- `~/.claude/settings.json`
+- `~/.codex/hooks.json`
 
-A candidate should usually satisfy all of these:
+The hooks are the automation layer. They track the most recent slash skill on `UserPromptSubmit`, capture observed assistant output on `Stop` when available, and record a correction when the next user prompt looks like reusable feedback.
+
+## Learning Workflow
+
+This skill does not directly rewrite another `SKILL.md`. It keeps the improvement loop traceable:
+
+1. Record raw events in `.learnings/events.jsonl`.
+2. Mirror events into human-readable Markdown logs under `.learnings/`.
+3. Distill repeated lessons into `.learnings/patterns.json`.
+4. Generate promotion candidates in `.learnings/promotion_candidates.md`.
+5. Promote a candidate only after enough evidence exists.
+
+Default promotion threshold:
 
 1. `evidence_count >= 3`
 2. `distinct_tasks >= 2`
 3. seen within the last 30 days
-4. expressible as a reusable rule
+4. expressible as a reusable instruction
+
+## Manual Script Entry Points
+
+The CLI and hooks are the normal team path. These scripts remain available for tests, debugging, and custom runtime integration:
+
+```bash
+node scripts/log-learning.js --help
+node scripts/record-from-context.js --help
+node scripts/distill-patterns.js --help
+```
+
+Use `record-from-context.js` when a host runtime already knows a reusable signal should be recorded. Use `log-learning.js` when all event fields are already known.
+
+## Runtime Integration
+
+Hook behavior is described in [HOOKS_INSTALL.md](HOOKS_INSTALL.md). The minimum event context used by the recorder is:
+
+- `used_skill`: skill that produced the experience
+- `signal`: `correction`, `failure`, `success`, `workaround`, or `capability_gap`
+- `task`: short task summary
+- `observed`: concrete behavior or previous assistant output
+- `feedback`: raw user correction or acceptance signal
+- `lesson`: reusable lesson
+- `target_scope`: usually `skill`
+- `target_name`: usually the used skill name
+
+Do not record every skill call. Record only events with a plausible reusable lesson.
 
 ## Directory Layout
 
@@ -262,115 +86,47 @@ A candidate should usually satisfy all of these:
 self-improvement/
 |-- SKILL.md
 |-- README.md
+|-- CLI.md
+|-- HOOKS_INSTALL.md
+|-- bin/
+|   `-- cli.js
 |-- scripts/
 |   |-- log-learning.js
 |   |-- record-from-context.js
-|   `-- distill-patterns.js
+|   |-- distill-patterns.js
+|   |-- install-team-skill.js
+|   |-- uninstall-team-skill.js
+|   |-- install-claude-hooks.js
+|   |-- install-codex-hooks.js
+|   |-- claude-hook-user-prompt-submit.js
+|   |-- claude-hook-stop.js
+|   |-- codex-hook-user-prompt-submit.js
+|   `-- codex-hook-stop.js
+|-- integrations/
 |-- references/
 |   `-- event-schema.md
 `-- .learnings/
     |-- events.jsonl
-    |-- LEARNINGS.md
-    |-- ERRORS.md
-    |-- FEATURE_REQUESTS.md
     |-- patterns.json
     `-- promotion_candidates.md
 ```
 
-## Example
-
-Record a correction:
-
-```bash
-node scripts/log-learning.js \
-  --skill frontend-api-integration \
-  --type user_correction \
-  --task "User asked for an API integration plan" \
-  --happened "First draft focused on process and missed the field mapping table" \
-  --feedback "The priority is field mapping, not general process" \
-  --lesson "For API integration tasks, prioritize field mapping and fallback handling" \
-  --scope skill \
-  --target frontend-api-integration \
-  --task-id api-001
-```
-
-Then distill:
-
-```bash
-node scripts/distill-patterns.js
-```
-
-Example distilled candidate:
-
-```text
-Target: frontend-api-integration
-Evidence count: 3
-Distinct tasks: 2
-Candidate lesson:
-For API integration tasks, prioritize field mapping and fallback handling before general process explanation.
-```
-
-What this shows:
-
-- a repeated correction becomes a reusable proposal
-- promotion is evidence-backed instead of anecdotal
-- the workflow stays inspectable after the fact
-
-## Boundaries
-
-- do not promote one correction into a durable rule
-- do not silently override existing skill rules
-- do not skip evidence and jump straight to rewrite
-- keep proposals traceable to raw events
-
-## Installation / Runtime Use
-
-Place this skill in a runtime-visible skill directory, for example:
-
-```text
-~/.agents/skills/self-improvement
-~/.claude/skills/self-improvement
-~/.cursor/skills/self-improvement
-<repo>/skills/self-improvement
-```
-
-Minimum expectation:
-
-- `README.md` explains the public contract
-- `SKILL.md` defines agent-facing execution rules
-- `scripts/` and `.learnings/` stay colocated with the skill
-
-For local use, run the helper scripts from the skill directory or reference them with an absolute path.
-
 ## Testing
-
-This skill can be tested with Node's built-in test runner. No extra dependencies are required.
-
-Run from the skill directory:
 
 ```bash
 npm test
 ```
 
-Current unit tests cover:
-
-- CLI argument parsing
-- log file routing
-- pattern key normalization and grouping
-- promotion threshold filtering
-- candidate Markdown rendering
-
-Integration coverage also verifies the end-to-end local workflow:
-
-- append learning events into `.learnings/events.jsonl`
-- write mirrored Markdown logs
-- distill repeated events into `patterns.json`
-- promote only eligible recent candidates into `promotion_candidates.md`
+The test suite covers CLI parsing, hook behavior, installation wiring, event logging, pattern distillation, and the end-to-end local learning workflow.
 
 ## Files
 
 - [SKILL.md](SKILL.md): agent-facing rules
-- [references/event-schema.md](references/event-schema.md): event fields
-- [scripts/log-learning.js](scripts/log-learning.js): event logger
-- [scripts/record-from-context.js](scripts/record-from-context.js): active recording entrypoint for agents or runtime hooks
+- [CLI.md](CLI.md): npm CLI reference
+- [HOOKS_INSTALL.md](HOOKS_INSTALL.md): Claude Code and Codex hook behavior
+- [references/event-schema.md](references/event-schema.md): event schema
+- [scripts/log-learning.js](scripts/log-learning.js): low-level event logger
+- [scripts/record-from-context.js](scripts/record-from-context.js): runtime-friendly recording entry point
+- [scripts/hook-utils.js](scripts/hook-utils.js): shared hook logic
+- [scripts/install-team-skill.js](scripts/install-team-skill.js): installer used by the CLI
 - [scripts/distill-patterns.js](scripts/distill-patterns.js): pattern distillation

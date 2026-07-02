@@ -12,14 +12,14 @@ This skill is a meta-skill for improving other skills from real usage. It does n
 - The user wants a skill to improve from ongoing usage.
 - The user wants to save a lesson from the current interaction.
 - The user corrects output and wants similar cases handled better later.
-- A task pattern keeps failing or needs repeated manual cleanup.
+- A task pattern keeps failing or needs repeated cleanup.
 - The user wants long-term improvement rules distilled from real usage.
 - Another skill just finished and produced a reusable correction, failure, workaround, success pattern, or capability gap.
 
 Do not use this skill when:
 
 - The task is a one-off and no learning should be retained.
-- The user already wants a direct manual edit to a skill and does not need evidence collection first.
+- The user already wants a direct edit to a skill and does not need evidence collection first.
 
 ## Core Principles
 
@@ -30,7 +30,7 @@ Do not use this skill when:
 
 ## Active Recording Protocol
 
-This skill cannot passively listen to all skill calls unless the host runtime provides hooks. Active recording therefore happens through the main agent or a host hook.
+This skill cannot passively listen to all skill calls unless the host runtime provides hooks. Active recording therefore happens through the main agent or the installed Claude Code / Codex hook handlers.
 
 After using another skill, perform a lightweight learning checkpoint:
 
@@ -38,7 +38,7 @@ After using another skill, perform a lightweight learning checkpoint:
 2. If a reusable signal appeared, record one event without asking the user.
 3. If promoting a candidate would modify another skill, ask for confirmation first.
 
-Use `scripts/auto-record-learning.js` when you want one post-skill hook that is safe to call after every skill invocation. Use `scripts/record-from-context.js` when the agent or a runtime hook has already decided that the just-completed skill usage should be recorded. Use `scripts/log-learning.js` when the event fields are already known.
+Use `scripts/record-from-context.js` when the agent or a runtime hook has already decided that the just-completed skill usage should be recorded. Use `scripts/log-learning.js` when the event fields are already known.
 
 ## Workflow
 
@@ -100,10 +100,19 @@ By default, a candidate should meet all of these:
 self-improvement/
 |-- SKILL.md
 |-- README.md
+|-- CLI.md
+|-- HOOKS_INSTALL.md
+|-- bin/
+|   `-- cli.js
 |-- scripts/
 |   |-- log-learning.js
 |   |-- record-from-context.js
-|   `-- distill-patterns.js
+|   |-- distill-patterns.js
+|   |-- install-team-skill.js
+|   |-- claude-hook-user-prompt-submit.js
+|   |-- claude-hook-stop.js
+|   |-- codex-hook-user-prompt-submit.js
+|   `-- codex-hook-stop.js
 |-- references/
 |   `-- event-schema.md
 `-- .learnings/
@@ -125,6 +134,9 @@ self-improvement/
 ## References
 
 - [README.md](README.md): architecture, workflow, implementation notes
+- [CLI.md](CLI.md): npm CLI installation and operations
+- [HOOKS_INSTALL.md](HOOKS_INSTALL.md): Claude Code and Codex hook behavior
 - [references/event-schema.md](references/event-schema.md): event field definitions
 - [scripts/log-learning.js](scripts/log-learning.js): event logging script
+- [scripts/record-from-context.js](scripts/record-from-context.js): runtime-friendly recording script
 - [scripts/distill-patterns.js](scripts/distill-patterns.js): pattern distillation script

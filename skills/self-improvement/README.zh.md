@@ -1,258 +1,84 @@
 # self-improvement
 
-这是一个让 skill 基于真实使用经验持续演化的轻量工作流。
-
-它不直接改写目标 `SKILL.md`，而是把改进拆成三步：
-
-1. 记录事件
-2. 归纳模式
-3. 生成晋升候选
-
-这样做的目的，是避免因为一次偶发反馈就把噪声写成长期规则。
-
-## 主动触发模型
-
-`self-improvement` 的最终定位是“元 skill”：它在其它 skill 被使用时，记录可复用的经验信号。
-
-它本身不是后台监听器。除非宿主运行时提供 hook，否则 skill 不能被动监听所有 skill 调用。主动记录只能来自三条路径：
-
-- 主 agent 在使用其它 skill 后执行一次 learning checkpoint
-- 宿主运行时在 skill 调用后通过 hook 调用记录脚本
-- 用户明确要求“记住这次”“下次别这样”“改进这个 skill”
-
-最现实的 MVP 是第一条：其它 skill 完成后，agent 做一次轻量判断：
-
-- 没有可复用信号：不记录
-- 出现用户纠正、重复失败、稳定 workaround、成功模式、能力缺口：记录一条事件
-- 要晋升候选或改写目标 skill：先征求确认
-
-如果你希望统一自动触发，可以把 `scripts/auto-record-learning.js` 作为 post-skill hook。它可以在每次 skill 调用后都执行；没有学习信号时会直接跳过。
-
-## 这个 Skill 是做什么的
-
-很多 agent 系统会说“可以学习”，但真正的学习闭环往往不清晰。
-
-这个 skill 把闭环落成了可检查的文件流程：
-
-- 原始事件会被保留下来
-- 重复 lesson 会被聚合
-- 候选规则必须有证据支持
-- 观察和写回分开，风险更低
-
-它适合作为一个独立 workflow，也适合作为其它 skill 演化机制的基础模块。
-
-## 适用场景
-
-适合在这些情况下使用：
-
-- 用户反复纠正同一类输出问题
-- 某个工作流总在同一个地方失败
-- 某种成功做法多次复现，已经比较稳定
-- 你希望 skill 能逐步优化，但不希望直接自动改写规则
-
-不适合在这些情况下使用：
-
-- 这是一次性任务，没有长期复用价值
-- 你已经明确知道要怎么改 skill，只想直接手工修改
-
-## Agent 触发方式
-
-当用户出现下面这类表达时，适合触发这个 skill：
-
-- “把这次教训记下来，下次别再犯。”
-- “这个 skill 老是在同一个地方出错。”
-- “把这些重复反馈整理成改进建议。”
-- “把这次有效做法沉淀下来，后面复用。”
-
-典型内部触发信号：
-
-- 用户不止一次纠正同类问题
-- agent 在不同任务里重复做同一类人工补救
-- 某个 workaround 连续成功，已经像稳定方法
-- 用户要的是长期改进，而不是当前这一次的修复
-- 其它 skill 刚刚产生了可复用的纠正、失败、workaround、成功模式或能力缺口
-
-## 使用方式
-
-以下命令都在 `self-improvement/` 目录下执行。
-
-### 1. 先记录一条 learning event
-
-```bash
-node scripts/log-learning.js \
-  --skill frontend-api-integration \
-  --type user_correction \
-  --task "用户要求生成接口联调方案" \
-  --happened "首版输出偏流程说明，缺少字段映射表" \
-  --feedback "重点不是流程，而是字段如何对齐" \
-  --lesson "接口联调任务优先输出字段映射与兜底策略" \
-  --scope skill \
-  --target frontend-api-integration \
-  --task-id api-001 \
-  --source session-2026-06-30-001
-```
-
-执行后会写入：
-
-- `.learnings/events.jsonl`
-- `.learnings/` 下对应的 Markdown 日志文件
-
-如果是主 agent 或运行时 hook 从“其它 skill 的使用上下文”主动记录，优先使用：
-
-```bash
-node scripts/record-from-context.js \
-  --used-skill frontend-api-integration \
-  --signal correction \
-  --task "用户要求生成接口联调方案" \
-  --observed "首版输出偏流程说明，缺少字段映射表" \
-  --feedback "重点不是流程，而是字段如何对齐" \
-  --lesson "接口联调任务优先输出字段映射与兜底策略" \
-  --target-scope skill \
-  --target-name frontend-api-integration \
-  --task-id api-001 \
-  --source session-2026-06-30-001
-```
-
-这个入口会把 `correction`、`failure`、`workaround`、`capability_gap` 这类运行时信号映射为标准 event schema。
-
-如果你想要一个“每次 skill 结束都能直接调用”的统一入口，可以用：
-
-```bash
-node scripts/auto-record-learning.js --context-json /tmp/skill-context.json
-```
-
-它的逻辑是：
-
-- `should_record=false`：跳过
-- 没有 `signal`：跳过
-- 有合法可复用信号：通过 `record-from-context.js` 记录
-
-### 2. 同一个 lesson 继续累计更多事件
-
-不要因为一个样本就晋升长期规则。应该在不同任务里继续记录同类 correction、failure 或 success pattern。
-
-常见 `--type`：
-
-- `success_pattern`
-- `user_correction`
-- `error_pattern`
-- `feature_request`
-
-### 3. 把重复事件归纳成候选模式
-
-```bash
-node scripts/distill-patterns.js
-```
-
-如果要自定义阈值：
-
-```bash
-node scripts/distill-patterns.js --min-evidence 3 --min-distinct-tasks 2
-```
-
-执行后会生成：
-
-- `.learnings/patterns.json`
-- `.learnings/promotion_candidates.md`
-
-### 4. 查看输出结果并决定是否晋升
-
-重点查看 `promotion_candidates.md`，判断哪些 lesson 已经具备进一步晋升的证据。
-
-常见下一步动作：
-
-- 先保留在本地 evidence，不继续动作
-- 晋升为项目级共享 guidance
-- 生成针对某个 skill 的 patch proposal
-- 如果模式范围更大，拆成一个新 skill
+面向 agent skills 的证据化自改进工具。这个包会安装 `self-improvement` skill，并配置 Claude Code / Codex hooks，让 slash skill 后续出现的用户纠正自动沉淀到 `.learnings/`。
 
 ## 快速开始
 
-最小闭环就是这 5 步：
-
-1. 每次使用其它 skill 后执行一次 learning checkpoint
-2. 如果出现可复用信号，执行 `node scripts/record-from-context.js ...` 或 `node scripts/log-learning.js ...`
-3. 当相同 lesson 在不同任务里再次出现时继续记录
-4. 执行 `node scripts/distill-patterns.js`
-5. 查看 `.learnings/promotion_candidates.md`
-6. 决定这个候选只保留为证据，还是继续晋升
-
-这个 checkpoint 应该很轻，不应该在没有长期价值时打断正常任务。
-
-## 运行时集成协议
-
-如果宿主支持 hook，可以在其它 skill 调用后把下面这些上下文传给 `record-from-context.js`：
-
-- `used_skill`：产生经验的 skill
-- `signal`：`correction`、`failure`、`success`、`workaround` 或 `capability_gap`
-- `task`：任务摘要
-- `what_happened` 或 `observed`：实际发生了什么
-- `user_feedback` 或 `feedback`：用户原始反馈或接受信号
-- `proposed_lesson` 或 `lesson`：可复用 lesson
-- `target_scope`：通常是 `skill`
-- `target_name`：通常是被使用的 skill 名称
-
-不要记录每一次 skill 调用。只有事件包含可复用 lesson 时才记录。
-
-如果宿主更适合固定调用一个 post-hook，而不想自己预判是否该记录，就调用 `auto-record-learning.js`，把“跳过还是记录”的判断留给它。
-
-## 工作流
-
-### 1. 记录事件
-
-用下面的命令查看帮助：
-
 ```bash
-node scripts/log-learning.js --help
+npx self-improvement-skill install
+npx self-improvement-skill doctor
 ```
 
-常见事件类型：
+安装后正常使用 Claude Code 或 Codex。当你执行 `/super-get-wiki` 这类 slash skill，并在下一轮用“不对...”“应该先...”这类话纠正输出时，hook 会把这条纠错记录到已安装 skill 的 `.learnings/` 目录。
 
-- 用户纠正
-- 任务失败
-- 可复用的成功方法
-- 缺失能力请求
-
-### 2. 归纳模式
-
-用下面的命令查看帮助：
+## CLI
 
 ```bash
-node scripts/distill-patterns.js --help
+npx self-improvement-skill install [--target both|claude|codex]
+npx self-improvement-skill doctor [--json]
+npx self-improvement-skill uninstall [--target both|claude|codex] [--remove-files]
+npx self-improvement-skill distill [--min-evidence 3] [--min-distinct-tasks 2]
 ```
 
-它会更新：
+完整说明见 [CLI.md](CLI.md)。
 
-- `.learnings/patterns.json`
-- `.learnings/promotion_candidates.md`
+## 安装内容
 
-### 3. 决定晋升级别
+CLI 会把 skill 安装到：
 
-当证据足够后，一个候选规则可以停留在这些层级：
+- `~/.claude/skills/self-improvement`
+- `~/.codex/skills/self-improvement`
 
-- 只作为本地 learning 保留
-- 晋升为项目共享 guidance
-- 变成某个目标 skill 的 patch proposal
-- 在少数情况下，演化成一个新的 skill
+同时写入受管理的 hook 配置：
 
-## 默认晋升阈值
+- `~/.claude/settings.json`
+- `~/.codex/hooks.json`
 
-通常一个候选至少要满足：
+hooks 是自动化层：在 `UserPromptSubmit` 里跟踪最近一次 slash skill，在 `Stop` 里尽量保存上一轮助手输出，并在下一次用户输入像纠错时，把纠错挂到最近一次 skill 上。
+
+## 学习闭环
+
+这个 skill 不直接改写其它 `SKILL.md`，而是把改进拆成可追溯流程：
+
+1. 原始事件写入 `.learnings/events.jsonl`。
+2. 同步写入 `.learnings/` 下的人类可读 Markdown 日志。
+3. 把重复 lesson 归纳到 `.learnings/patterns.json`。
+4. 生成 `.learnings/promotion_candidates.md`。
+5. 证据足够后，再决定是否晋升为长期规则或目标 skill 修改。
+
+默认晋升阈值：
 
 1. `evidence_count >= 3`
 2. `distinct_tasks >= 2`
 3. 最近 30 天内出现过
-4. 能表达成可复用的 instruction
+4. 能表达成可复用 instruction
 
-## 当前聚合逻辑
+## 脚本入口
 
-模式按下面三个字段聚合：
+团队使用优先走 CLI 和 hooks。下面这些脚本保留给测试、调试和自定义运行时集成：
 
-- `target_scope`
-- `target_name`
-- `proposed_lesson`
+```bash
+node scripts/log-learning.js --help
+node scripts/record-from-context.js --help
+node scripts/distill-patterns.js --help
+```
 
-也就是说，多条事件如果目标相同，且提出的是同一条 lesson，就会被视为同一个 pattern。
+当宿主运行时已经判断出需要记录某个可复用信号时，用 `record-from-context.js`。当完整事件字段已经明确时，用 `log-learning.js`。
+
+## 运行时集成
+
+hook 行为见 [HOOKS_INSTALL.md](HOOKS_INSTALL.md)。记录器使用的最小上下文是：
+
+- `used_skill`：产生经验的 skill
+- `signal`：`correction`、`failure`、`success`、`workaround` 或 `capability_gap`
+- `task`：任务摘要
+- `observed`：实际行为或上一轮助手输出
+- `feedback`：用户原始纠错或接受信号
+- `lesson`：可复用 lesson
+- `target_scope`：通常是 `skill`
+- `target_name`：通常是被使用的 skill 名称
+
+不要记录每一次 skill 调用。只有包含可复用 lesson 的事件才应该记录。
 
 ## 目录结构
 
@@ -261,129 +87,47 @@ self-improvement/
 |-- SKILL.md
 |-- README.md
 |-- README.zh.md
-|-- package.json
+|-- CLI.md
+|-- HOOKS_INSTALL.md
+|-- bin/
+|   `-- cli.js
 |-- scripts/
 |   |-- log-learning.js
 |   |-- record-from-context.js
-|   `-- distill-patterns.js
-|-- tests/
-|   |-- log-learning.test.js
-|   |-- distill-patterns.test.js
-|   `-- workflow.integration.test.js
+|   |-- distill-patterns.js
+|   |-- install-team-skill.js
+|   |-- uninstall-team-skill.js
+|   |-- install-claude-hooks.js
+|   |-- install-codex-hooks.js
+|   |-- claude-hook-user-prompt-submit.js
+|   |-- claude-hook-stop.js
+|   |-- codex-hook-user-prompt-submit.js
+|   `-- codex-hook-stop.js
+|-- integrations/
 |-- references/
 |   `-- event-schema.md
 `-- .learnings/
     |-- events.jsonl
-    |-- LEARNINGS.md
-    |-- ERRORS.md
-    |-- FEATURE_REQUESTS.md
     |-- patterns.json
     `-- promotion_candidates.md
 ```
 
-## 示例
-
-先记录一次纠正：
-
-```bash
-node scripts/log-learning.js \
-  --skill frontend-api-integration \
-  --type user_correction \
-  --task "用户要求生成接口联调方案" \
-  --happened "首版输出偏流程说明，缺少字段映射表" \
-  --feedback "重点不是流程，而是字段如何对齐" \
-  --lesson "接口联调任务优先输出字段映射与兜底策略" \
-  --scope skill \
-  --target frontend-api-integration \
-  --task-id api-001
-```
-
-再执行归纳：
-
-```bash
-node scripts/distill-patterns.js
-```
-
-可能得到的候选结果：
-
-```text
-Target: frontend-api-integration
-Evidence count: 3
-Distinct tasks: 2
-Candidate lesson:
-接口联调任务优先输出字段映射与兜底策略，而不是先讲通用流程。
-```
-
-这个例子说明了三点：
-
-- 重复纠正可以被收敛成可复用提案
-- 晋升是基于证据，不是基于一次主观判断
-- 后续回看时可以追溯到原始事件
-
-## 边界
-
-- 不要把一次纠正直接晋升成长期规则
-- 不要静默覆盖已有 skill 规则
-- 不要跳过证据收集直接改写 skill
-- 所有 proposal 都应该能追溯到原始事件
-
-## 安装与运行
-
-把这个 skill 放到 agent 运行时可见的 skill 目录，例如：
-
-```text
-~/.agents/skills/self-improvement
-~/.claude/skills/self-improvement
-~/.cursor/skills/self-improvement
-<repo>/skills/self-improvement
-```
-
-最低要求：
-
-- `README.md` 说明对外使用方式
-- `SKILL.md` 说明 agent 执行规则
-- `scripts/` 和 `.learnings/` 与 skill 本体放在一起
-
-本地运行时，可以直接在 skill 目录下执行脚本，或用绝对路径调用。
-
 ## 测试
-
-这个 skill 使用 Node 内置测试运行器，不依赖 Jest 或 Vitest。
-
-在 skill 目录下执行：
 
 ```bash
 npm test
 ```
 
-当前单元测试覆盖：
-
-- CLI 参数解析
-- 日志文件路由
-- pattern key 归一化与分组
-- 晋升阈值过滤
-- candidate Markdown 渲染
-
-当前集成测试覆盖完整本地流程：
-
-- 追加 learning event 到 `.learnings/events.jsonl`
-- 同步写入 Markdown 日志
-- 把重复事件归纳为 `patterns.json`
-- 只把满足条件且近期出现的模式晋升到 `promotion_candidates.md`
-
-## 后续可扩展方向
-
-可以继续补充：
-
-1. 冲突检测
-2. patch proposal 生成器
-3. 面向具体 skill 的效果对比
-4. 验证通过后的写回流程
+测试覆盖 CLI 参数、hook 行为、安装配置、事件记录、模式归纳和端到端本地学习流程。
 
 ## 文件
 
-- [SKILL.md](SKILL.md)：agent 侧执行规则
-- [references/event-schema.md](references/event-schema.md)：事件字段定义
-- [scripts/log-learning.js](scripts/log-learning.js)：事件记录脚本
-- [scripts/record-from-context.js](scripts/record-from-context.js)：供 agent 或运行时 hook 使用的主动记录入口
+- [SKILL.md](SKILL.md)：agent 侧规则
+- [CLI.md](CLI.md)：npm CLI 说明
+- [HOOKS_INSTALL.md](HOOKS_INSTALL.md)：Claude Code 和 Codex hooks 行为
+- [references/event-schema.md](references/event-schema.md)：事件结构
+- [scripts/log-learning.js](scripts/log-learning.js)：底层事件记录器
+- [scripts/record-from-context.js](scripts/record-from-context.js)：面向运行时的记录入口
+- [scripts/hook-utils.js](scripts/hook-utils.js)：hook 共享逻辑
+- [scripts/install-team-skill.js](scripts/install-team-skill.js)：CLI 使用的安装器
 - [scripts/distill-patterns.js](scripts/distill-patterns.js)：模式归纳脚本
