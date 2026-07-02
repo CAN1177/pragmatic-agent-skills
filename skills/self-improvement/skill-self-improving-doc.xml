@@ -1,0 +1,243 @@
+<title>skill-self-improving</title>
+
+<callout emoji="📌" background-color="light-blue" border-color="blue">
+  <p><b>一句话概述：</b>skill-self-improving 是一个让 Agent Skill 基于真实使用反馈持续改进的元 Skill。它不直接改写其它 Skill，而是把“使用过程中的纠正、失败、成功模式、能力缺口”记录成可追溯证据，再聚合成可审核的改进候选。</p>
+</callout>
+
+<h1>1. 背景与目标</h1>
+<p>现有 Skill 往往依赖人工维护：用户纠正了一次输出、Agent 发现某个 workaround 有效、某个 Skill 在多个任务里反复失败，这些经验通常只停留在当前会话里，无法稳定沉淀到后续使用。</p>
+<p><b>skill-self-improving</b> 的目标是建立一个低风险、可追溯、可审核的 Skill 改进闭环，让 Skill 的演化从“凭感觉修改规则”变成“基于真实事件和重复证据的工程流程”。</p>
+
+<h1>2. 解决的痛点</h1>
+<table>
+  <colgroup><col span="1" width="160"/><col span="1" width="360"/><col span="1" width="360"/></colgroup>
+  <thead>
+    <tr>
+      <th background-color="light-gray">痛点</th>
+      <th background-color="light-gray">典型表现</th>
+      <th background-color="light-gray">本方案如何解决</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>经验丢失</b></td>
+      <td>用户纠正了 Agent，但下一次同类任务仍然犯同样错误。</td>
+      <td>把纠正、失败、成功模式记录为 learning event，保存在 .learnings/events.jsonl。</td>
+    </tr>
+    <tr>
+      <td><b>过度学习</b></td>
+      <td>一次偶发反馈被直接写进 Skill，长期规则被噪声污染。</td>
+      <td>设置晋升阈值：默认 evidence_count &gt;= 3、distinct_tasks &gt;= 2、最近 30 天出现。</td>
+    </tr>
+    <tr>
+      <td><b>改动不可追溯</b></td>
+      <td>Skill 为什么加了某条规则，后来无法解释。</td>
+      <td>每个候选规则都保留 evidence_refs，可回溯到原始事件。</td>
+    </tr>
+    <tr>
+      <td><b>缺少主动触发</b></td>
+      <td>只有用户明确说“记住”时才记录，很多隐性学习信号被漏掉。</td>
+      <td>把 self-improvement 定义为元 Skill：其它 Skill 使用后执行 learning checkpoint，有信号才记录。</td>
+    </tr>
+    <tr>
+      <td><b>自动改写风险</b></td>
+      <td>让 Agent 直接重写 Skill 容易引入错误规则或覆盖既有约束。</td>
+      <td>只生成证据和候选，不直接改写目标 SKILL.md；真正晋升前需要确认。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>3. 总体架构</h1>
+<p>系统分为三层：触发层负责发现学习信号，记录层负责结构化保存事件，归纳层负责把重复事件变成可审核的候选规则。</p>
+
+<whiteboard type="mermaid">
+flowchart LR
+  User[用户反馈/纠正] --> Agent[主 Agent]
+  Skill[其它业务 Skill 使用过程] --> Agent
+  Agent --> Checkpoint{Learning Checkpoint}
+  Checkpoint -->|无可复用信号| Skip[不记录]
+  Checkpoint -->|有可复用信号| Recorder[record-from-context.js]
+  Hook[Runtime Hook 可选] --> Recorder
+  Recorder --> Logger[log-learning.js]
+  Logger --> Events[(.learnings/events.jsonl)]
+  Logger --> MdLogs[LEARNINGS / ERRORS / FEATURE_REQUESTS]
+  Events --> Distiller[distill-patterns.js]
+  Distiller --> Patterns[(patterns.json)]
+  Distiller --> Candidates[promotion_candidates.md]
+  Candidates --> Review{人工/Agent 审核}
+  Review -->|证据不足| Keep[继续观察]
+  Review -->|证据充分| Proposal[生成 Skill 改进提案]
+  Proposal --> Target[目标 Skill 后续修改]
+</whiteboard>
+
+<h1>4. 核心工作流</h1>
+<ol>
+  <li seq="auto"><b>使用其它 Skill：</b>Agent 正常完成用户任务，例如使用 frontend-api-integration、lark-doc、requirements-analysis 等 Skill。</li>
+  <li seq="auto"><b>执行 learning checkpoint：</b>任务结束前判断是否出现用户纠正、重复失败、稳定 workaround、成功模式或能力缺口。</li>
+  <li seq="auto"><b>主动记录事件：</b>如果有可复用信号，调用 record-from-context.js，把上下文映射成标准 learning event。</li>
+  <li seq="auto"><b>持续积累证据：</b>同一 lesson 需要跨任务重复出现，不能因为单次反馈直接晋升。</li>
+  <li seq="auto"><b>归纳候选模式：</b>运行 distill-patterns.js，把相同 target_scope、target_name、proposed_lesson 聚合成 pattern。</li>
+  <li seq="auto"><b>审核并决定晋升：</b>候选满足阈值后，再决定保留在 .learnings、晋升为共享 guidance、生成目标 Skill patch proposal，或拆成新 Skill。</li>
+</ol>
+
+<h1>5. 关键模块</h1>
+<table>
+  <colgroup><col span="1" width="220"/><col span="1" width="420"/><col span="1" width="300"/></colgroup>
+  <thead>
+    <tr>
+      <th background-color="light-gray">模块</th>
+      <th background-color="light-gray">职责</th>
+      <th background-color="light-gray">当前状态</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>SKILL.md</code></td>
+      <td>定义元 Skill 的触发规则：当其它 Skill 使用中出现 correction、failure、workaround、capability gap 时必须使用。</td>
+      <td>已完成</td>
+    </tr>
+    <tr>
+      <td><code>record-from-context.js</code></td>
+      <td>面向主 Agent 或 runtime hook 的主动记录入口，把运行时上下文转换成标准 event。</td>
+      <td>已完成</td>
+    </tr>
+    <tr>
+      <td><code>log-learning.js</code></td>
+      <td>底层事件写入器，负责写入 events.jsonl 和 Markdown 日志。</td>
+      <td>已完成</td>
+    </tr>
+    <tr>
+      <td><code>distill-patterns.js</code></td>
+      <td>聚合重复 lesson，生成 patterns.json 和 promotion_candidates.md。</td>
+      <td>已完成</td>
+    </tr>
+    <tr>
+      <td><code>.learnings/</code></td>
+      <td>保存原始事件、人工可读日志、候选模式和晋升建议。</td>
+      <td>已完成</td>
+    </tr>
+    <tr>
+      <td><code>patch proposal</code></td>
+      <td>根据晋升候选生成目标 Skill 的改进建议或补丁草案。</td>
+      <td>建议下一阶段建设</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>6. 主动触发机制</h1>
+<p>skill-self-improving 的主动性不是来自后台常驻进程，而是来自 Agent 执行协议或宿主 hook。</p>
+<grid>
+  <column width-ratio="0.5">
+    <h2>Agent Checkpoint 模式</h2>
+    <p>其它 Skill 使用完成后，主 Agent 做一次轻量判断：如果没有长期价值，不记录；如果出现可复用学习信号，则调用记录脚本。</p>
+    <p><b>优势：</b>无需改造运行时，MVP 成本最低。</p>
+  </column>
+  <column width-ratio="0.5">
+    <h2>Runtime Hook 模式</h2>
+    <p>如果宿主支持 skill invocation hook，可以在 Skill 调用后把 used_skill、signal、task、observed、feedback、lesson 等字段传给 record-from-context.js。</p>
+    <p><b>优势：</b>记录更稳定，可减少 Agent 遗漏。</p>
+  </column>
+</grid>
+
+<h1>7. 预期收益</h1>
+<table>
+  <colgroup><col span="1" width="220"/><col span="1" width="520"/><col span="1" width="220"/></colgroup>
+  <thead>
+    <tr>
+      <th background-color="light-gray">收益</th>
+      <th background-color="light-gray">说明</th>
+      <th background-color="light-gray">衡量方式</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>减少重复错误</b></td>
+      <td>用户纠正不再只停留在单轮会话，而是沉淀为可复用证据。</td>
+      <td>同类 correction 次数下降</td>
+    </tr>
+    <tr>
+      <td><b>提升 Skill 迭代质量</b></td>
+      <td>Skill 修改前有 evidence_refs 支撑，避免凭单次主观感受改规则。</td>
+      <td>候选规则命中率、回滚率</td>
+    </tr>
+    <tr>
+      <td><b>降低维护成本</b></td>
+      <td>重复反馈自动聚合，维护者只需审核高置信候选。</td>
+      <td>人工整理反馈时间</td>
+    </tr>
+    <tr>
+      <td><b>增强可解释性</b></td>
+      <td>每条改进建议都能追溯到具体任务、反馈和原始事件。</td>
+      <td>候选规则 evidence 完整率</td>
+    </tr>
+    <tr>
+      <td><b>支持规模化 Skill 运营</b></td>
+      <td>当 Skill 数量增加时，可以用统一机制管理改进信号，而不是逐个手工复盘。</td>
+      <td>接入 Skill 数、候选处理周期</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>8. 边界与风险控制</h1>
+<callout emoji="❗" background-color="light-yellow" border-color="yellow">
+  <p><b>核心边界：</b>self-improvement 只负责记录证据和生成候选，不直接修改其它 Skill。任何会改变目标 SKILL.md 的动作，都应该经过确认或评审。</p>
+</callout>
+<ul>
+  <li>不记录每一次 Skill 调用，只记录有可复用 lesson 的事件。</li>
+  <li>不把单次 correction 直接晋升为长期规则。</li>
+  <li>候选规则与既有规则冲突时，应标记冲突，而不是静默覆盖。</li>
+  <li>事件中应避免写入敏感信息，必要时只保留摘要和 source_reference。</li>
+  <li>候选晋升前需要检查目标 Skill 的当前约束，避免局部优化破坏全局行为。</li>
+</ul>
+
+<h1>9. 当前实现状态</h1>
+<ul>
+  <li>已新增主动记录入口 <code>scripts/record-from-context.js</code>。</li>
+  <li>已强化 <code>SKILL.md</code> 的 MUST USE 元触发规则。</li>
+  <li>已补充 Runtime Signal Mapping：correction、failure、success、workaround、capability_gap。</li>
+  <li>已补充测试 <code>tests/record-from-context.test.js</code>。</li>
+  <li>本地验证通过：<code>npm test</code> 共 16 个测试全部通过，<code>quick_validate.py</code> 返回 Skill is valid。</li>
+  <li>代码已提交并推送：<code>d846b12 Add active self-improvement recording entrypoint</code>。</li>
+</ul>
+
+<h1>10. 建议后续路线图</h1>
+<table>
+  <colgroup><col span="1" width="160"/><col span="1" width="480"/><col span="1" width="320"/></colgroup>
+  <thead>
+    <tr>
+      <th background-color="light-gray">阶段</th>
+      <th background-color="light-gray">建设内容</th>
+      <th background-color="light-gray">产出</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>阶段 1</td>
+      <td>把 self-improvement 作为元 Skill 在真实任务中试运行，积累 correction、failure、success_pattern 数据。</td>
+      <td>稳定的 .learnings/events.jsonl</td>
+    </tr>
+    <tr>
+      <td>阶段 2</td>
+      <td>增加 patch proposal 生成器，把 promotion_candidates.md 转成目标 Skill 的建议补丁。</td>
+      <td>可审核 patch 草案</td>
+    </tr>
+    <tr>
+      <td>阶段 3</td>
+      <td>加入冲突检测，检查候选规则是否与目标 SKILL.md 既有规则冲突。</td>
+      <td>冲突报告</td>
+    </tr>
+    <tr>
+      <td>阶段 4</td>
+      <td>接入宿主 runtime hook，让 Skill 使用结束后自动传入上下文并触发记录。</td>
+      <td>更自动化的学习闭环</td>
+    </tr>
+    <tr>
+      <td>阶段 5</td>
+      <td>建立效果评估指标，跟踪某条规则晋升前后的错误率、返工率、用户纠正率。</td>
+      <td>Skill 改进效果看板</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>11. 结论</h1>
+<p>skill-self-improving 的价值不在于“让 Agent 自动改写自己”，而在于把 Skill 迭代变成一个工程化闭环：真实事件进入、重复证据聚合、候选规则生成、人工或 Agent 审核后再晋升。这个设计牺牲了一部分自动化速度，但换来了更高的可追溯性、可控性和长期维护质量。</p>

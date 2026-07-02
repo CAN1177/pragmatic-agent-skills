@@ -38,7 +38,7 @@ After using another skill, perform a lightweight learning checkpoint:
 2. If a reusable signal appeared, record one event without asking the user.
 3. If promoting a candidate would modify another skill, ask for confirmation first.
 
-Use `scripts/record-from-context.js` when the agent or a runtime hook has a structured summary of the just-completed skill usage. Use `scripts/log-learning.js` when the event fields are already known.
+Use `scripts/auto-record-learning.js` when you want one post-skill hook that is safe to call after every skill invocation. Use `scripts/record-from-context.js` when the agent or a runtime hook has already decided that the just-completed skill usage should be recorded. Use `scripts/log-learning.js` when the event fields are already known.
 
 ## Workflow
 

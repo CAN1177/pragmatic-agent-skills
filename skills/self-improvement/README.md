@@ -30,6 +30,8 @@ The practical MVP is the first path. After any other skill finishes, the agent c
 - user correction, repeated failure, stable workaround, success pattern, or capability gap: record one event
 - candidate promotion or target skill rewrite: ask for confirmation first
 
+For a centralized automatic checkpoint, use `scripts/auto-record-learning.js` as a post-skill hook. It is safe to call after every skill invocation and will skip runs that do not contain a reusable learning signal.
+
 ## Why This Skill Is Worth Keeping
 
 Many agent systems say they "learn", but the actual loop is vague.
@@ -117,6 +119,18 @@ node scripts/record-from-context.js \
 
 This script maps runtime-friendly signals like `correction`, `failure`, `workaround`, and `capability_gap` into the event schema used by `log-learning.js`.
 
+If you want one entry point that can be called after every skill invocation without pre-filtering, use:
+
+```bash
+node scripts/auto-record-learning.js --context-json /tmp/skill-context.json
+```
+
+This hook behaves as follows:
+
+- `should_record=false`: skip
+- no `signal`: skip
+- valid reusable signal: record through `record-from-context.js`
+
 ### 2. Record more events for the same lesson
 
 Do not promote a rule from one example. Record repeated corrections, failures, or success patterns across different tasks.
@@ -183,6 +197,8 @@ If the host runtime supports hooks, call `record-from-context.js` after skill us
 - `target_name`: usually the used skill name
 
 Do not record every skill call. Record only when the event contains a plausible reusable lesson.
+
+If your host prefers a single unconditional post-skill hook, call `auto-record-learning.js` instead and let it decide whether to skip or record.
 
 Manual fallback workflow:
 

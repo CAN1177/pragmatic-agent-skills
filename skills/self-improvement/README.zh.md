@@ -26,6 +26,8 @@
 - 出现用户纠正、重复失败、稳定 workaround、成功模式、能力缺口：记录一条事件
 - 要晋升候选或改写目标 skill：先征求确认
 
+如果你希望统一自动触发，可以把 `scripts/auto-record-learning.js` 作为 post-skill hook。它可以在每次 skill 调用后都执行；没有学习信号时会直接跳过。
+
 ## 这个 Skill 是做什么的
 
 很多 agent 系统会说“可以学习”，但真正的学习闭环往往不清晰。
@@ -113,6 +115,18 @@ node scripts/record-from-context.js \
 
 这个入口会把 `correction`、`failure`、`workaround`、`capability_gap` 这类运行时信号映射为标准 event schema。
 
+如果你想要一个“每次 skill 结束都能直接调用”的统一入口，可以用：
+
+```bash
+node scripts/auto-record-learning.js --context-json /tmp/skill-context.json
+```
+
+它的逻辑是：
+
+- `should_record=false`：跳过
+- 没有 `signal`：跳过
+- 有合法可复用信号：通过 `record-from-context.js` 记录
+
 ### 2. 同一个 lesson 继续累计更多事件
 
 不要因为一个样本就晋升长期规则。应该在不同任务里继续记录同类 correction、failure 或 success pattern。
@@ -179,6 +193,8 @@ node scripts/distill-patterns.js --min-evidence 3 --min-distinct-tasks 2
 - `target_name`：通常是被使用的 skill 名称
 
 不要记录每一次 skill 调用。只有事件包含可复用 lesson 时才记录。
+
+如果宿主更适合固定调用一个 post-hook，而不想自己预判是否该记录，就调用 `auto-record-learning.js`，把“跳过还是记录”的判断留给它。
 
 ## 工作流
 
